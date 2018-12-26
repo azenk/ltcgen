@@ -63,8 +63,8 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 
-	frameTimer := time.Tick(time.Nanosecond * 1000000000 / 30)
 	frame := glitc.LTCFrame{FramesPerSecond: 30, DropFrame: true, ExternalClockSync: true}
+	frameTimer := time.Tick(frame.FrameDuration())
 	for {
 		select {
 		case t := <-frameTimer:

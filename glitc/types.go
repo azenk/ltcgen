@@ -20,6 +20,22 @@ func asBCD(number int) (int, int) {
 	return tens, ones
 }
 
+type TimeCode struct {
+	Hour      int
+	Minute    int
+	Second    int
+	Frame     int
+	DropFrame bool
+}
+
+func (tc TimeCode) String() string {
+	fmtString := "%0.2d:%0.2d:%0.2d:%0.2d"
+	if tc.DropFrame {
+		fmtString = "%0.2d;%0.2d;%0.2d;%0.2d"
+	}
+	return fmt.Sprintf(fmtString, tc.Hour, tc.Minute, tc.Second, tc.Frame)
+}
+
 type LTCFrame struct {
 	Time              time.Time
 	FramesPerSecond   int
@@ -29,22 +45,54 @@ type LTCFrame struct {
 	UserBytes         *[4]byte
 }
 
-func (f LTCFrame) String() string {
-	return fmt.Sprintf("%0.2d:%0.2d:%0.2d:%0.2d", f.Time.Hour(), f.Time.Minute(), f.Time.Second(), f.Frame())
-}
-
 // Frame returns current frame number
-func (f LTCFrame) Frame() int {
-	rawFrameNumber := float64(f.Time.Nanosecond()) / 1e9 * float64(f.FramesPerSecond)
-	if rawFrameNumber <= 1 && f.DropFrame && f.Time.Second() == 0 && f.Time.Minute()%10 != 0 {
-		rawFrameNumber = 2
+func (f LTCFrame) Frame() TimeCode {
+	if !f.DropFrame {
+		return TimeCode{
+			Hour:      f.Time.Hour(),
+			Minute:    f.Time.Minute(),
+			Second:    f.Time.Second(),
+			Frame:     int(float64(f.Time.Nanosecond()) / 1e9 * f.EffectiveFPS()),
+			DropFrame: false,
+		}
 	}
-	return int(rawFrameNumber)
+
+	m := f.Time.Minute()
+	mTen := f.Time.Minute() / 10
+	s := f.Time.Second()
+	n := f.Time.Nanosecond()
+
+	nanoseconds := int64((m%10*60+s))*1e9 + int64(n)
+	framePeriod := f.FrameDuration().Nanoseconds()
+	frameIndex := int(nanoseconds / int64(framePeriod))
+
+	var minute, second, frame int
+	if frameIndex < 30*60 {
+		minute = 0
+	} else {
+		minute = 1 + (frameIndex-30*60)/(30*59+28)
+	}
+	second = (frameIndex + 2*minute - 30*60*minute) / 30
+
+	if minute == 0 {
+		frame = frameIndex - second*30
+	} else if minute != 0 && second == 0 {
+		frame = 2 + (frameIndex - 1800 - (minute-1)*1798 - second*30)
+	} else {
+		frame = frameIndex + 2*minute - minute*30*60 - second*30
+	}
+	return TimeCode{
+		Hour:      f.Time.Hour(),
+		Minute:    mTen*10 + minute,
+		Second:    second,
+		Frame:     frame,
+		DropFrame: true,
+	}
 }
 
 // FrameDuration total frame duration
 func (f LTCFrame) FrameDuration() time.Duration {
-	return time.Second / time.Duration(f.FramesPerSecond)
+	return time.Second * 1000 / time.Duration(f.EffectiveFPS()*1000)
 }
 
 // BitPeriod the clock period used for encoding
@@ -52,14 +100,24 @@ func (f LTCFrame) BitPeriod() time.Duration {
 	return f.FrameDuration() / 80
 }
 
+// EffectiveFPS returns effective frames per second
+func (f LTCFrame) EffectiveFPS() float64 {
+	if !f.DropFrame {
+		return float64(f.FramesPerSecond)
+	}
+	return float64(30) * float64(18000.0-18.0) / float64(18000.0)
+}
+
 // EncodeFrame returns a byte array representing this LTCFrame
 func (f LTCFrame) EncodeFrame() []byte {
 	var externalClock, b10, b11, b27, b43, b59 int
 
-	hTens, hOnes := asBCD(f.Time.Hour())
-	mTens, mOnes := asBCD(f.Time.Minute())
-	sTens, sOnes := asBCD(f.Time.Second())
-	fTens, fOnes := asBCD(f.Frame())
+	tc := f.Frame()
+
+	hTens, hOnes := asBCD(tc.Hour)
+	mTens, mOnes := asBCD(tc.Minute)
+	sTens, sOnes := asBCD(tc.Second)
+	fTens, fOnes := asBCD(tc.Frame)
 
 	if f.DropFrame {
 		b10 = 1
@@ -122,7 +180,7 @@ func (f LTCFrame) EncodeFrame() []byte {
 }
 
 func (f LTCFrame) GetAudioSamples(sampleRate int, amplitude int) []int32 {
-	sampleCount := sampleRate / f.FramesPerSecond
+	sampleCount := int(float64(sampleRate) / f.EffectiveFPS())
 
 	samples := make([]int32, sampleCount)
 	samplesPerBit := len(samples) / 80
