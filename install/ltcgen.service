@@ -1,0 +1,11 @@
+[Unit]
+Description=Timecode Generator
+After=alsa-restore.service ntp.service
+Requires=alsa-restore.service ntp.service
+
+[Service]
+ExecStart=/home/pi/ltcgen
+User=pi
+
+[Install]
+WantedBy=multi-user.target
