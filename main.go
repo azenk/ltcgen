@@ -69,7 +69,7 @@ func main() {
 		select {
 		case t := <-frameTimer:
 			frame.Time = t
-			glog.Infof("Sending frame: %v", frame)
+			glog.Infof("Sending frame for time %s: %v, Samples in queue: %d", frame.Time, frame.Frame(), len(streamCh))
 			for _, sample := range frame.GetAudioSamples(config.Rate, math.MaxInt32>>4) {
 				streamCh <- sample
 			}
