@@ -191,7 +191,7 @@ func (f LTCFrame) GetAudioSamples(sampleRate int, amplitude int) []int32 {
 	var sample int
 	for bit := 0; bit < 80; bit++ {
 		byteOffset := bit / 8
-		bitValue := (binaryFrame[byteOffset] >> uint(bit%8)) & 0x1
+		bitValue := (binaryFrame[byteOffset] >> uint(7-bit%8)) & 0x1
 
 		// always transition on positive clock edge
 		if currentValue > 0 {
