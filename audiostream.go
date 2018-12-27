@@ -32,6 +32,10 @@ func (c StreamConfiguration) String() string {
 	return fmt.Sprintf("Period: %d, SampleSize: %d bits, Rate: %d HZ, Channels: %d", c.PeriodSize, c.SampleSizeBytes()*8, c.Rate, c.Channels)
 }
 
+func (c StreamConfiguration) OutputDelay() time.Duration {
+	return time.Duration(c.PeriodSize) * time.Second / time.Duration(c.Rate)
+}
+
 type StreamDevice struct {
 	device *alsa.Device
 	doneCh chan error

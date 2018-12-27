@@ -64,11 +64,13 @@ func main() {
 	frame := glitc.LTCFrame{FramesPerSecond: 30, DropFrame: true, ExternalClockSync: true}
 	frameTimer := time.NewTicker(frame.FrameDuration())
 	glog.Infof("Sending LTC frame every %s", frame.FrameDuration())
+	outputDelay := config.OutputDelay()
+	glog.Infof("Output delay estimated at %s, will attempt to compensate", outputDelay)
 	for {
 		select {
 		case t := <-frameTimer.C:
-			delay := time.Since(t)
-			frame.Time = t
+			frame.Time = t.Add(outputDelay)
+			delay := time.Since(frame.Time)
 			for _, sample := range frame.GetAudioSamples(config.Rate, math.MaxInt32) {
 				streamCh <- sample
 			}
