@@ -50,31 +50,41 @@ func main() {
 	streamDevice := NewStreamDevice(playbackDevice)
 	config, err := streamDevice.Open()
 	if err != nil {
-		glog.Infof("Unable to open device for streaming")
+		glog.Infof("Unable to open device for streaming: %v", err)
 		os.Exit(1)
 	}
 	defer streamDevice.Close()
+	glog.Infof("Device configuration -- %s", config)
 
-	streamCh, cancelCh := streamDevice.Stream()
-	defer func() {
-		cancelCh <- struct{}{}
-	}()
+	streamCh := streamDevice.Stream()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 
 	frame := glitc.LTCFrame{FramesPerSecond: 30, DropFrame: true, ExternalClockSync: true}
-	frameTimer := time.Tick(frame.FrameDuration())
+	frameTimer := time.NewTicker(frame.FrameDuration())
+	glog.Infof("Sending LTC frame every %s", frame.FrameDuration())
 	for {
 		select {
-		case t := <-frameTimer:
+		case t := <-frameTimer.C:
+			delay := time.Since(t)
 			frame.Time = t
-			glog.Infof("Sending frame for time %s: %v, Samples in queue: %d", frame.Time, frame.Frame(), len(streamCh))
-			for _, sample := range frame.GetAudioSamples(config.Rate, math.MaxInt32>>4) {
+			for _, sample := range frame.GetAudioSamples(config.Rate, math.MaxInt32) {
 				streamCh <- sample
 			}
+			glog.Infof("Sent frame for time %s: %v, Samples in queue: %d, delay: %s", frame.Time, frame.Frame(), len(streamCh), delay)
 		case <-c:
-			goto cleanup
+			frameTimer.Stop()
+			close(streamCh)
+		case err, more := <-streamDevice.Done():
+			if err != nil {
+				glog.Infof("Error streaming data: %v", err)
+			}
+
+			if !more {
+				glog.Info("Exiting")
+				os.Exit(0)
+			}
 		}
 	}
 	//
@@ -84,20 +94,5 @@ func main() {
 	// 	t := float64(i) / float64(config.Rate)
 	// 	streamCh <- int32(math.Sin(t*2*math.Pi) * math.MaxInt32)
 	// }
-
-cleanup:
-	glog.Infof("Closing Stream")
-	close(streamCh)
-	for {
-		glog.Info("Waiting for error or done")
-		err, more := <-streamDevice.Done()
-		if err != nil {
-			glog.Infof("Error streaming data: %v", err)
-		}
-		if !more {
-			glog.Info("Exiting")
-			os.Exit(0)
-		}
-	}
 
 }
