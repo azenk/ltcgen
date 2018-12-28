@@ -2,6 +2,7 @@ package glitc
 
 import (
 	"fmt"
+	"math"
 	"math/bits"
 	"time"
 )
@@ -183,13 +184,32 @@ func (f LTCFrame) GetAudioSamples(sampleRate int, amplitude int) []int32 {
 	sampleCount := int(float64(sampleRate) / f.EffectiveFPS())
 
 	samples := make([]int32, sampleCount)
-	samplesPerBit := len(samples) / 80
+	samplesPerBit := int(float64(sampleRate) / (f.EffectiveFPS() * 80))
+	clockErr := int(math.Round(float64(sampleRate*10)/(f.EffectiveFPS()*80))) % 10
 
 	binaryFrame := f.EncodeFrame()
 
 	currentValue := -1 * amplitude
 	var sample int
 	for bit := 0; bit < 80; bit++ {
+		var c1, c2 int
+		c1 = samplesPerBit >> 1
+		c2 = samplesPerBit >> 1
+
+		if samplesPerBit%2 == 1 {
+			c2 = c2 + 1
+		}
+
+		if bit%10 < clockErr {
+			c1 = c1 + 1
+		}
+
+		if c1+c2 > sampleCount-sample {
+			// glog.Infof("Frame would be too long by %d samples, trimming", c1+c2-(sampleCount-sample))
+			c2 = sampleCount - sample - c1
+		}
+
+		// glog.Infof("Bit: %d, %d/%d\n", bit, c1, c2)
 		byteOffset := bit / 8
 		bitValue := (binaryFrame[byteOffset] >> uint(7-bit%8)) & 0x1
 
@@ -200,7 +220,7 @@ func (f LTCFrame) GetAudioSamples(sampleRate int, amplitude int) []int32 {
 			currentValue = amplitude
 		}
 
-		for i := 0; i < samplesPerBit/2; i++ {
+		for i := 0; i < c1; i++ {
 			samples[sample] = int32(currentValue)
 			sample++
 		}
@@ -214,11 +234,12 @@ func (f LTCFrame) GetAudioSamples(sampleRate int, amplitude int) []int32 {
 			}
 		}
 
-		for i := 0; i < samplesPerBit/2; i++ {
+		for i := 0; i < c2; i++ {
 			samples[sample] = int32(currentValue)
 			sample++
 		}
 	}
+	// glog.Infof("Samples per bit: %d, TotalSamples: %d/%d", samplesPerBit, sample, sampleCount)
 
 	// any remaining frames are set to minimum
 	for ; sample < len(samples); sample++ {
