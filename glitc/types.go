@@ -151,17 +151,17 @@ func (f LTCFrame) EncodeFrame() []byte {
 	binaryFrame[9] |= SyncBits & 0xFF
 	binaryFrame[8] |= SyncBits >> 8 & 0xFF
 
-	binaryFrame[7] |= byte((hTens&0x3)<<6 | (externalClock&0x1)<<5 | (b59&0x1)<<4)
-	binaryFrame[6] |= byte((hOnes & 0xF) << 4)
+	binaryFrame[7] |= byte(bits.Reverse8(uint8(hTens&0x3)) | uint8(externalClock&0x1)<<5 | uint8(b59&0x1)<<4)
+	binaryFrame[6] |= byte(bits.Reverse8(uint8(hOnes & 0xF)))
 
-	binaryFrame[5] |= byte((mTens&0x7)<<5 | (b43&0x1)<<4)
-	binaryFrame[4] |= byte((mOnes & 0xF) << 4)
+	binaryFrame[5] |= byte(bits.Reverse8(uint8(mTens&0x7)) | uint8(b43&0x1)<<4)
+	binaryFrame[4] |= byte(bits.Reverse8(uint8(mOnes & 0xF)))
 
-	binaryFrame[3] |= byte((sTens&0x7)<<5 | (b27&0x1)<<4)
-	binaryFrame[2] |= byte((sOnes & 0xF) << 4)
+	binaryFrame[3] |= byte(bits.Reverse8(uint8(sTens&0x7)) | uint8(b27&0x1)<<4)
+	binaryFrame[2] |= byte(bits.Reverse8(uint8(sOnes & 0xF)))
 
-	binaryFrame[1] |= byte((fTens&0x3)<<6 | (b10&0x1)<<5 | (b11&0x1)<<4)
-	binaryFrame[0] |= byte((fOnes & 0xF) << 4)
+	binaryFrame[1] |= byte(bits.Reverse8(uint8(fTens&0x3)) | uint8(b10&0x1)<<5 | uint8(b11&0x1)<<4)
+	binaryFrame[0] |= byte(bits.Reverse8(uint8(fOnes & 0xF)))
 
 	var ones int
 	for _, b := range binaryFrame {
