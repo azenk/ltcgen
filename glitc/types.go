@@ -39,7 +39,7 @@ func (tc TimeCode) String() string {
 
 type LTCFrame struct {
 	Time              time.Time
-	FramesPerSecond   int
+	FramesPerSecond   float64
 	DropFrame         bool
 	ColorFrame        bool
 	ExternalClockSync bool

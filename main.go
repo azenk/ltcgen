@@ -10,11 +10,18 @@ import (
 
 	"github.com/azenk/ltcgen/glitc"
 	"github.com/golang/glog"
+	"github.com/spf13/viper"
 	"github.com/yobert/alsa"
 )
 
 func main() {
 	flag.Parse()
+	cfgFile := viper.New()
+	cfgFile.AddConfigPath("/etc/ltcgen")
+	cfgFile.SetConfigName("ltcgen")
+	cfgFile.SetDefault("fps", 29.97)
+	cfgFile.SetDefault("dropframe", true)
+	cfgFile.ReadInConfig()
 
 	cards, err := alsa.OpenCards()
 	if err != nil {
@@ -61,7 +68,17 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 
-	frame := glitc.LTCFrame{FramesPerSecond: 30, DropFrame: true, ExternalClockSync: true}
+	fps := cfgFile.GetFloat64("fps")
+	dropframe := cfgFile.GetBool("dropframe")
+
+	if dropframe && fps != 29.97 {
+		glog.Infof("Dropframe is set to true and isn't supported for the specified framerate.  Overriding fps to 29.97")
+		fps = 29.97
+	}
+
+	frame := glitc.LTCFrame{FramesPerSecond: fps, DropFrame: dropframe, ExternalClockSync: true}
+	glog.Infof("Configured for %f fps, dropframe: %v", frame.EffectiveFPS(), frame.DropFrame)
+
 	frameTimer := time.NewTicker(frame.FrameDuration())
 	glog.Infof("Sending LTC frame every %s", frame.FrameDuration())
 	outputDelay := config.OutputDelay()
