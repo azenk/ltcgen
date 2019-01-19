@@ -11,6 +11,7 @@ type DurationStatistics struct {
 	n        int
 	average  time.Duration
 	variance int64
+	minMax   MinMaxDuration
 }
 
 func (s *DurationStatistics) Update(d time.Duration) {
@@ -18,6 +19,7 @@ func (s *DurationStatistics) Update(d time.Duration) {
 	oldAvg := s.average
 	s.average = oldAvg + (d-oldAvg)/time.Duration(s.n)
 	s.variance += (d - s.average).Nanoseconds() * (d - oldAvg).Nanoseconds()
+	s.minMax.Update(d)
 }
 
 func (s DurationStatistics) Variance() time.Duration {
@@ -27,12 +29,16 @@ func (s DurationStatistics) Variance() time.Duration {
 	return 0
 }
 
+func (s DurationStatistics) Slow(d time.Duration) bool {
+	return d > s.average+100*time.Microsecond
+}
+
 func (s DurationStatistics) StdDev() time.Duration {
 	return time.Duration(math.Sqrt(float64(s.Variance().Nanoseconds())))
 }
 
 func (s DurationStatistics) String() string {
-	return fmt.Sprintf("(mean/stddev): %s/%s", s.average, s.StdDev())
+	return fmt.Sprintf("(min/mean/stddev/max): %s/%s/%s/%s", s.minMax.Min(), s.average, s.StdDev(), s.minMax.Max())
 }
 
 type MinMaxDuration struct {
@@ -49,6 +55,14 @@ func (m *MinMaxDuration) Update(d time.Duration) {
 	}
 
 	m.current = d
+}
+
+func (m MinMaxDuration) Min() time.Duration {
+	return m.min
+}
+
+func (m MinMaxDuration) Max() time.Duration {
+	return m.max
 }
 
 func (m MinMaxDuration) String() string {
@@ -87,13 +101,14 @@ func (r *TimeRing) AvgRate() float64 {
 }
 
 type Status struct {
-	sent      int64
-	dropped   int64
-	duplicate int64
-	start     time.Time
-	lastSent  time.Time
-	times     *TimeRing
-	offset    DurationStatistics
+	sent        int64
+	dropped     int64
+	duplicate   int64
+	largeOffset int64
+	start       time.Time
+	lastSent    time.Time
+	times       *TimeRing
+	offset      DurationStatistics
 }
 
 func NewStatus(rateLen int) *Status {
@@ -106,6 +121,9 @@ func (s *Status) Sent(offset time.Duration) {
 	s.times.Mark()
 	s.sent++
 	s.offset.Update(offset)
+	if offset > time.Millisecond {
+		s.largeOffset++
+	}
 }
 
 func (s *Status) Dropped(number int) {
@@ -121,5 +139,6 @@ func (s Status) FPS() float64 {
 }
 
 func (s Status) String() string {
-	return fmt.Sprintf("Sent: %d, Dropped: %d, Duplicate: %d, FPS: %0.3f, Intraframe Offset %s", s.sent, s.dropped, s.duplicate, s.FPS(), s.offset)
+	pct := 100 * (1 - float64(s.largeOffset+s.dropped+s.duplicate)/float64(s.sent))
+	return fmt.Sprintf("%d frames sent - %0.2f%% perfect %d/%d/%d drop/dup/slow - frame start offset %s", s.sent, pct, s.dropped, s.duplicate, s.largeOffset, s.offset)
 }
