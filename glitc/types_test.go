@@ -1,8 +1,6 @@
 package glitc
 
 import (
-	"math"
-	"math/bits"
 	"testing"
 	"time"
 
@@ -172,82 +170,30 @@ func TestFrameEncode(t *testing.T) {
 
 }
 
-func TestFrameAudioEncode(t *testing.T) {
-	testCases := []struct {
-		Name  string
-		Frame LTCFrame
+func TestFrameBeginTime(t *testing.T) {
+	zoneUSCentral, err := time.LoadLocation("US/Central")
+	if err != nil {
+		t.Fatalf("Unable to load US/Central Timezone: %v", err)
+	}
+
+	cases := []struct {
+		Name              string
+		Frame             LTCFrame
+		ExpectedBeginTime time.Time
 	}{
 		{
-			"24fps-0",
-			LTCFrame{Time: time.Date(2018, 12, 1, 23, 0, 0, 0, time.Local), FramesPerSecond: 24},
-		},
-		{
-			"24fps-1",
-			LTCFrame{Time: time.Date(2018, 12, 1, 23, 0, 0, 42000000, time.Local), FramesPerSecond: 24},
-		},
-		{
-			"25fps-0",
-			LTCFrame{Time: time.Date(2018, 12, 1, 23, 0, 0, 0, time.Local), FramesPerSecond: 25},
-		},
-		{
-			"30fps-0",
-			LTCFrame{Time: time.Date(2018, 12, 1, 23, 14, 21, 0, time.Local), FramesPerSecond: 30},
-		},
-		{
-			"30fps/df-2",
-			LTCFrame{Time: time.Date(2018, 12, 1, 23, 14, 0, 0, time.Local), FramesPerSecond: 30, DropFrame: true},
-		},
-		{
-			"30fps/df-0",
-			LTCFrame{Time: time.Date(2018, 12, 1, 23, 40, 21, 0, time.Local), FramesPerSecond: 30, DropFrame: true, ExternalClockSync: true},
-		},
-		{
-			"30fps/df-0-userdata",
-			LTCFrame{Time: time.Date(2018, 12, 1, 23, 40, 21, 0, time.Local), FramesPerSecond: 30, DropFrame: true, ExternalClockSync: true, UserBytes: &[4]byte{0xA5, 0xC3, 0x91, 0x72}},
-		},
-		{
-			"25fps-0-userdata",
-			LTCFrame{Time: time.Date(2018, 12, 1, 23, 40, 21, 0, time.Local), FramesPerSecond: 25, ExternalClockSync: true, UserBytes: &[4]byte{0xA5, 0xC3, 0x91, 0x72}},
+			Name:              "midnight",
+			Frame:             LTCFrame{Time: time.Date(2019, 1, 1, 0, 0, 0, 0, zoneUSCentral), FramesPerSecond: 30},
+			ExpectedBeginTime: time.Date(2019, 1, 1, 0, 0, 0, 0, zoneUSCentral),
 		},
 	}
 
-	for _, c := range testCases {
+	for _, c := range cases {
 		t.Run(c.Name, func(st *testing.T) {
-			samples := c.Frame.GetAudioSamples(44100, math.MaxInt32)
-			expectedSampleCount := int(float64(44100) / c.Frame.EffectiveFPS())
-			if len(samples) != expectedSampleCount {
-				st.Errorf("Got wrong number of samples: got %d, expected %d", len(samples), expectedSampleCount)
-			}
-
-			if samples[0] <= 0 {
-				st.Errorf("First sample should be positive: got %d", samples[0])
-			}
-
-			if samples[len(samples)-1] >= 0 {
-				st.Errorf("Last sample should be negative: got %d", samples[len(samples)-1])
-			}
-
-			expectedTransitions := 0
-			for _, b := range c.Frame.EncodeFrame() {
-				ones := bits.OnesCount8(uint8(b))
-				expectedTransitions += 8 - ones
-				expectedTransitions += 2 * ones
-				st.Logf("T: %d, Ones: %d", expectedTransitions, ones)
-			}
-
-			transitions := 0
-			var state int32 = math.MinInt32
-			for _, s := range samples {
-				if int32(state) != s {
-					transitions++
-					state = s
-				}
-			}
-
-			if transitions != expectedTransitions {
-				st.Errorf("Got wrong number of transitions: got %d, expected %d", transitions, expectedTransitions)
+			st.Logf("Frame Time: %s", c.Frame.Time)
+			if begin := c.Frame.FrameBeginTime(); begin != c.ExpectedBeginTime {
+				st.Errorf("begin time doesn't match expected: got %s, expected %s", begin, c.ExpectedBeginTime)
 			}
 		})
 	}
-
 }

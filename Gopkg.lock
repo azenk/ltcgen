@@ -2,6 +2,17 @@
 
 
 [[projects]]
+  branch = "master"
+  digest = "1:b3467c25350599688fab1cf027b4455a68dab9b5812d3b8280db2263f67e20ed"
+  name = "github.com/azenk/audio"
+  packages = [
+    "stream",
+    "stream/encoding",
+  ]
+  pruneopts = "UT"
+  revision = "0a2cf57e2086157a4c891b712e069b426b951545"
+
+[[projects]]
   digest = "1:abeb38ade3f32a92943e5be54f55ed6d6e3b6602761d74b4aab4c9dd45c18abd"
   name = "github.com/fsnotify/fsnotify"
   packages = ["."]
@@ -127,11 +138,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:5b7594f7c43cb5fc8f31c3f4a9f6a61ee798dbd5fcb36b70cb3d4780aad4c509"
+  digest = "1:ab01052262e2ef935fdec4632b4029e56e7efbc96a569feebdcdc67fd84a9b5b"
   name = "golang.org/x/sys"
   packages = ["unix"]
   pruneopts = "UT"
-  revision = "9a3f9b0469bbc6b8802087ae5c0af9f61502de01"
+  revision = "20be8e55dc7b4b7a1b1660728164a8509d8c9209"
 
 [[projects]]
   digest = "1:8029e9743749d4be5bc9f7d42ea1659471767860f0cdc34d37c3111bd308a295"
@@ -160,10 +171,11 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/azenk/audio/stream",
+    "github.com/azenk/audio/stream/encoding",
     "github.com/go-test/deep",
     "github.com/golang/glog",
     "github.com/spf13/viper",
-    "github.com/yobert/alsa",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -2,7 +2,6 @@ package glitc
 
 import (
 	"fmt"
-	"math"
 	"math/bits"
 	"time"
 )
@@ -46,6 +45,18 @@ type LTCFrame struct {
 	UserBytes         *[4]byte
 }
 
+// dropFrame10MinIndex returns the number of frames since the beginning of this 10 minute drop frame window
+func (f LTCFrame) dropFrame10MinIndex() int {
+	m := f.Time.Minute()
+	s := f.Time.Second()
+	n := f.Time.Nanosecond()
+
+	nanoseconds := int64((m%10*60+s))*1e9 + int64(n)
+	framePeriod := f.FrameDuration().Nanoseconds()
+	frameIndex := int(nanoseconds / int64(framePeriod))
+	return frameIndex
+}
+
 // Frame returns current frame number
 func (f LTCFrame) Frame() TimeCode {
 	if !f.DropFrame {
@@ -58,14 +69,7 @@ func (f LTCFrame) Frame() TimeCode {
 		}
 	}
 
-	m := f.Time.Minute()
-	mTen := f.Time.Minute() / 10
-	s := f.Time.Second()
-	n := f.Time.Nanosecond()
-
-	nanoseconds := int64((m%10*60+s))*1e9 + int64(n)
-	framePeriod := f.FrameDuration().Nanoseconds()
-	frameIndex := int(nanoseconds / int64(framePeriod))
+	frameIndex := f.dropFrame10MinIndex()
 
 	var minute, second, frame int
 	if frameIndex < 30*60 {
@@ -82,6 +86,7 @@ func (f LTCFrame) Frame() TimeCode {
 	} else {
 		frame = frameIndex + 2*minute - minute*30*60 - second*30
 	}
+	mTen := f.Time.Minute() / 10
 	return TimeCode{
 		Hour:      f.Time.Hour(),
 		Minute:    mTen*10 + minute,
@@ -107,6 +112,23 @@ func (f LTCFrame) EffectiveFPS() float64 {
 		return float64(f.FramesPerSecond)
 	}
 	return float64(30) * float64(18000.0-18.0) / float64(18000.0)
+}
+
+// FrameIndex returns the number of whole frames from timecode 00:00:00:00
+func (f LTCFrame) FrameIndex() int {
+	if !f.DropFrame {
+		return int(float64(f.Time.Hour()*3600+f.Time.Minute()*60+f.Time.Second())*f.EffectiveFPS() + float64(f.Frame().Frame))
+	}
+
+	return int(float64(f.Time.Hour())*3600*f.EffectiveFPS() +
+		float64(f.Time.Minute()/10)*60*10*f.EffectiveFPS() +
+		float64(f.dropFrame10MinIndex()))
+}
+
+// FrameBeginTime returns the time this frame starts
+func (f LTCFrame) FrameBeginTime() time.Time {
+	midnightLocal := time.Date(f.Time.Year(), f.Time.Month(), f.Time.Day(), 0, 0, 0, 0, f.Time.Location())
+	return midnightLocal.Add(time.Duration(f.FrameIndex()) * f.FrameDuration())
 }
 
 // EncodeFrame returns a byte array representing this LTCFrame
@@ -178,73 +200,4 @@ func (f LTCFrame) EncodeFrame() []byte {
 	}
 
 	return binaryFrame
-}
-
-func (f LTCFrame) GetAudioSamples(sampleRate int, amplitude int) []int32 {
-	sampleCount := int(float64(sampleRate) / f.EffectiveFPS())
-
-	samples := make([]int32, sampleCount)
-	samplesPerBit := int(float64(sampleRate) / (f.EffectiveFPS() * 80))
-	clockErr := int(math.Round(float64(sampleRate*10)/(f.EffectiveFPS()*80))) % 10
-
-	binaryFrame := f.EncodeFrame()
-
-	currentValue := -1 * amplitude
-	var sample int
-	for bit := 0; bit < 80; bit++ {
-		var c1, c2 int
-		c1 = samplesPerBit >> 1
-		c2 = samplesPerBit >> 1
-
-		if samplesPerBit%2 == 1 {
-			c2 = c2 + 1
-		}
-
-		if bit%10 < clockErr {
-			c1 = c1 + 1
-		}
-
-		if c1+c2 > sampleCount-sample {
-			// glog.Infof("Frame would be too long by %d samples, trimming", c1+c2-(sampleCount-sample))
-			c2 = sampleCount - sample - c1
-		}
-
-		// glog.Infof("Bit: %d, %d/%d\n", bit, c1, c2)
-		byteOffset := bit / 8
-		bitValue := (binaryFrame[byteOffset] >> uint(7-bit%8)) & 0x1
-
-		// always transition on positive clock edge
-		if currentValue > 0 {
-			currentValue = -1 * amplitude
-		} else {
-			currentValue = amplitude
-		}
-
-		for i := 0; i < c1; i++ {
-			samples[sample] = int32(currentValue)
-			sample++
-		}
-
-		// transition again on ones
-		if bitValue != 0 {
-			if currentValue > 0 {
-				currentValue = -1 * amplitude
-			} else {
-				currentValue = amplitude
-			}
-		}
-
-		for i := 0; i < c2; i++ {
-			samples[sample] = int32(currentValue)
-			sample++
-		}
-	}
-	// glog.Infof("Samples per bit: %d, TotalSamples: %d/%d", samplesPerBit, sample, sampleCount)
-
-	// any remaining frames are set to minimum
-	for ; sample < len(samples); sample++ {
-		samples[sample] = int32(currentValue)
-	}
-
-	return samples
 }
