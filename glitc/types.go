@@ -31,7 +31,7 @@ type TimeCode struct {
 func (tc TimeCode) String() string {
 	fmtString := "%0.2d:%0.2d:%0.2d:%0.2d"
 	if tc.DropFrame {
-		fmtString = "%0.2d;%0.2d;%0.2d;%0.2d"
+		fmtString = "%0.2d:%0.2d:%0.2d;%0.2d"
 	}
 	return fmt.Sprintf(fmtString, tc.Hour, tc.Minute, tc.Second, tc.Frame)
 }
