@@ -30,7 +30,7 @@ func (s DurationStatistics) Variance() time.Duration {
 }
 
 func (s DurationStatistics) Slow(d time.Duration) bool {
-	return d > s.average+100*time.Microsecond
+	return d > s.average+500*time.Microsecond
 }
 
 func (s DurationStatistics) StdDev() time.Duration {

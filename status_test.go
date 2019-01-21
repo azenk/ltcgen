@@ -22,6 +22,13 @@ func TestDurationStatistics(t *testing.T) {
 	}
 }
 
+func TestSlow(t *testing.T) {
+	s := DurationStatistics{average: time.Millisecond}.Slow(1501 * time.Microsecond)
+	if !s {
+		t.Errorf("Expected slow frame, returned false")
+	}
+}
+
 func TestTimeRing(t *testing.T) {
 	r := NewTimeRing(10)
 	r.Mark()
